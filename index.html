@@ -1,0 +1,741 @@
+<title>マンガ二値化ツール</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --bg: #F1F1F5;
+  --surface: #FFFFFF;
+  --surface2: #EAEAEF;
+  --border: #DCDCE6;
+  --fg: #111118;
+  --fg-mid: #44445A;
+  --fg-muted: #7070A0;
+  --accent: #2454E8;
+  --accent-h: #1A44D4;
+  --accent-t: rgba(36,84,232,.08);
+  --mono: 'Space Mono', monospace;
+  --sans: 'Noto Sans JP', system-ui, sans-serif;
+  --r: 10px; --r2: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D0D14; --surface: #15151E; --surface2: #1C1C28;
+    --border: #26263A; --fg: #E8E8F4; --fg-mid: #AAAAC8; --fg-muted: #6868A0;
+    --accent: #5B8FFF; --accent-h: #6B9FFF; --accent-t: rgba(91,143,255,.1);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D0D14; --surface: #15151E; --surface2: #1C1C28;
+  --border: #26263A; --fg: #E8E8F4; --fg-mid: #AAAAC8; --fg-muted: #6868A0;
+  --accent: #5B8FFF; --accent-h: #6B9FFF; --accent-t: rgba(91,143,255,.1);
+  color-scheme: dark;
+}
+*,*::before,*::after { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; margin: 0;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left,0px));
+  padding-right: max(16px, env(safe-area-inset-right,0px));
+}
+.wrap { max-width: 880px; margin-inline: auto; }
+
+/* Header */
+.hdr { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.hdr-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); background: var(--accent-t); border: 1px solid var(--accent); border-radius: var(--r2); padding: 3px 8px; white-space: nowrap; margin-top: 3px; }
+h1 { font-family: var(--mono); font-size: 17px; font-weight: 700; margin: 0 0 3px; letter-spacing: -.02em; }
+.hdr p { margin: 0; font-size: 12px; color: var(--fg-muted); }
+
+/* Drop zone */
+#drop { border: 2px dashed var(--border); border-radius: var(--r); padding: 60px 24px; text-align: center; cursor: pointer; transition: .15s; background: var(--surface); margin-bottom: 24px; user-select: none; }
+#drop:hover, #drop.over { border-color: var(--accent); background: var(--accent-t); }
+.drop-ico { font-size: 36px; opacity: .35; margin-bottom: 12px; }
+.drop-title { font-weight: 700; font-size: 15px; margin: 0 0 5px; }
+.drop-sub { font-size: 12px; color: var(--fg-muted); margin: 0; }
+#finput { display: none; }
+
+/* Workspace */
+#ws { display: none; }
+#ws.on { display: block; }
+
+/* Comparison */
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+@media (max-width: 580px) { .cmp { grid-template-columns: 1fr; } }
+.pnl { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; min-width: 0; }
+.pnl-hd { padding: 8px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.pnl-name { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-muted); }
+.pnl-info { font-family: var(--mono); font-size: 10px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.pnl-cvs { background: repeating-conic-gradient(#80808018 0% 25%, transparent 0% 50%) 0 0 / 18px 18px; overflow: auto; max-height: 65vh; display: flex; align-items: flex-start; justify-content: center; }
+.pnl-cvs canvas { max-width: 100%; display: block; }
+
+/* Controls */
+.ctrl-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin-bottom: 16px; }
+.ctrl-title { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--fg-muted); margin: 0 0 16px; }
+.cg { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; }
+@media (max-width: 500px) { .cg { grid-template-columns: 1fr; } }
+.c-row { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.c-row.full { grid-column: 1 / -1; }
+.c-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fg-muted); }
+.c-desc { font-size: 11px; color: var(--fg-muted); margin: -2px 0 0; }
+.cdiv { grid-column: 1/-1; border: none; border-top: 1px solid var(--border); margin: 2px 0; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab, .us-tab { padding: 6px 12px; border-radius: var(--r2); border: 1px solid var(--border); background: var(--surface2); color: var(--fg-muted); font-size: 12px; font-weight: 500; cursor: pointer; transition: .12s; white-space: nowrap; font-family: var(--sans); }
+.tab:hover, .us-tab:hover { border-color: var(--accent); color: var(--fg); }
+.tab.on, .us-tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Sliders */
+.sl-row { display: flex; align-items: center; gap: 10px; }
+.sl-row input[type=range] { flex: 1; accent-color: var(--accent); min-width: 0; cursor: pointer; }
+.sv { font-family: var(--mono); font-size: 12px; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
+
+/* Checkbox */
+.ck-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.ck-row input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+.ck-row span { font-size: 13px; font-weight: 500; cursor: pointer; }
+
+/* Otsu badge */
+.otsu-badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--fg-muted); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r2); padding: 5px 12px; }
+.ov { color: var(--accent); font-weight: 700; font-size: 14px; }
+
+/* Actions */
+.acts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.btn { padding: 9px 18px; border-radius: var(--r2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--sans); transition: .12s; }
+.btn-p { background: var(--accent); color: #fff; border: none; }
+.btn-p:hover { background: var(--accent-h); }
+.btn-s { background: var(--surface); color: var(--fg); border: 1px solid var(--border); }
+.btn-s:hover { border-color: var(--accent); }
+
+/* Hint */
+.hint { font-size: 12px; color: var(--fg-muted); padding: 10px 14px; background: var(--surface2); border-radius: var(--r2); border: 1px solid var(--border); line-height: 1.6; }
+.hint strong { color: var(--fg); }
+
+/* Export section */
+.size-pill { display: inline-block; font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); background: var(--accent-t); border: 1px solid var(--accent); border-radius: var(--r2); padding: 4px 12px; }
+.dim-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.dim-row input[type=number] { width: 72px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--r2); background: var(--surface2); color: var(--fg); font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.dim-row input[type=number]:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.dim-row .unit { font-size: 12px; color: var(--fg-muted); }
+.px-info { font-family: var(--mono); font-size: 12px; color: var(--fg-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.warn { font-size: 11px; color: #E07000; background: rgba(224,112,0,.1); border: 1px solid rgba(224,112,0,.3); border-radius: var(--r2); padding: 6px 10px; margin-top: 4px; display: none; }
+.warn.show { display: block; }
+.export-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.btn-loading { opacity: .6; cursor: wait !important; pointer-events: none; }
+</style>
+
+<div class="wrap">
+  <header class="hdr">
+    <div class="hdr-badge">BINARIZE</div>
+    <div>
+      <h1>マンガ二値化ツール</h1>
+      <p>Tシャツ印刷・シルクスクリーン向け 白黒変換 — ルールベース</p>
+    </div>
+  </header>
+
+  <div id="drop">
+    <div class="drop-ico">🖼️</div>
+    <p class="drop-title">画像をドロップ、またはクリックして選択</p>
+    <p class="drop-sub">PNG / JPG / WebP 対応</p>
+    <input type="file" id="finput" accept="image/*">
+  </div>
+
+  <div id="ws">
+    <div class="cmp">
+      <div class="pnl">
+        <div class="pnl-hd">
+          <span class="pnl-name">Original</span>
+          <span class="pnl-info" id="src-info">—</span>
+        </div>
+        <div class="pnl-cvs"><canvas id="src-cvs"></canvas></div>
+      </div>
+      <div class="pnl">
+        <div class="pnl-hd">
+          <span class="pnl-name">Binary</span>
+          <span class="pnl-info" id="out-info">—</span>
+        </div>
+        <div class="pnl-cvs"><canvas id="out-cvs"></canvas></div>
+      </div>
+    </div>
+
+    <div class="ctrl-box">
+      <p class="ctrl-title">変換設定</p>
+      <div class="cg">
+
+        <div class="c-row full">
+          <span class="c-label">アルゴリズム</span>
+          <div class="tabs">
+            <button class="tab on" data-m="global">グローバル閾値</button>
+            <button class="tab" data-m="otsu">Otsu 自動</button>
+            <button class="tab" data-m="adaptive">適応的閾値</button>
+            <button class="tab" data-m="manga">マンガ最適</button>
+          </div>
+        </div>
+
+        <hr class="cdiv">
+
+        <!-- Global controls -->
+        <div class="c-row" id="g-ctrl">
+          <span class="c-label">閾値（0–255）</span>
+          <div class="sl-row">
+            <input type="range" id="s-thr" min="0" max="255" value="128">
+            <span class="sv" id="s-thr-v">128</span>
+          </div>
+          <span class="c-desc">低い値 → より多く黒 ／ 高い値 → より多く白</span>
+        </div>
+
+        <!-- Otsu display -->
+        <div class="c-row" id="otsu-row" style="display:none">
+          <span class="c-label">自動推定された閾値</span>
+          <div class="otsu-badge">最適閾値 → <span class="ov" id="otsu-val">—</span></div>
+          <span class="c-desc">ヒストグラムのクラス間分散を最大化</span>
+        </div>
+
+        <!-- Adaptive controls -->
+        <div class="c-row" id="a-ctrl1" style="display:none">
+          <span class="c-label">ブロックサイズ（奇数）</span>
+          <div class="sl-row">
+            <input type="range" id="s-blk" min="5" max="101" step="2" value="25">
+            <span class="sv" id="s-blk-v">25</span>
+          </div>
+          <span class="c-desc">局所平均を計算する近傍ピクセル数</span>
+        </div>
+
+        <div class="c-row" id="a-ctrl2" style="display:none">
+          <span class="c-label">定数 C（感度）</span>
+          <div class="sl-row">
+            <input type="range" id="s-c" min="-20" max="40" value="5">
+            <span class="sv" id="s-c-v">5</span>
+          </div>
+          <span class="c-desc">大きいほど黒が少なくなる</span>
+        </div>
+
+        <!-- Manga info -->
+        <div class="c-row full" id="manga-info" style="display:none">
+          <span class="c-desc" style="color:var(--accent)">▸ 自動ブロックサイズ + C=10 + シャープン適用。マンガ線画向けに調整済み。</span>
+        </div>
+
+        <hr class="cdiv">
+
+        <div class="c-row full">
+          <label class="ck-row">
+            <input type="checkbox" id="cb-sharp">
+            <span>線を先鋭化してから変換（シャープンフィルタ）</span>
+          </label>
+        </div>
+
+        <hr class="cdiv">
+
+        <div class="c-row full">
+          <span class="c-label">事前アップスケール（ガビガビ画像向け）</span>
+          <div class="tabs">
+            <button class="us-tab on" data-s="1">なし</button>
+            <button class="us-tab" data-s="2">×2</button>
+            <button class="us-tab" data-s="4">×4</button>
+          </div>
+        </div>
+
+        <div class="c-row full" id="us-opt" style="display:none">
+          <label class="ck-row">
+            <input type="checkbox" id="cb-unsharp" checked>
+            <span>アンシャープマスクで輪郭強調（推奨）</span>
+          </label>
+          <span class="c-desc" id="us-size-info"></span>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="acts">
+      <button class="btn btn-p" id="btn-proc">変換する</button>
+      <button class="btn btn-s" id="btn-change">画像を変更</button>
+    </div>
+
+    <!-- Export section -->
+    <div class="ctrl-box" id="export-box" style="display:none">
+      <p class="ctrl-title">Tシャツ印刷データ出力</p>
+      <div class="cg">
+        <div class="c-row full">
+          <span class="c-label">印刷サイズ</span>
+          <div class="tabs" style="margin-bottom:6px">
+            <button class="us-tab on sz-tab" data-w="35.5" data-h="40">Tシャツ（標準）</button>
+            <button class="us-tab sz-tab" data-w="40" data-h="45">Tシャツ（大）</button>
+            <button class="us-tab sz-tab" data-w="21" data-h="29.7">A4</button>
+            <button class="us-tab sz-tab" data-w="29.7" data-h="42">A3</button>
+            <button class="us-tab sz-tab" data-w="" data-h="">カスタム</button>
+          </div>
+          <div class="dim-row">
+            <input type="number" id="in-w" value="35.5" min="1" max="300" step="0.1">
+            <span class="unit">cm × </span>
+            <input type="number" id="in-h" value="40" min="1" max="300" step="0.1">
+            <span class="unit">cm</span>
+          </div>
+        </div>
+        <div class="c-row">
+          <span class="c-label">解像度</span>
+          <div class="tabs">
+            <button class="tab on dpi-tab" data-dpi="150">150 DPI</button>
+            <button class="tab dpi-tab" data-dpi="300">300 DPI</button>
+          </div>
+        </div>
+        <div class="c-row full">
+          <span class="c-label">出力ピクセル数</span>
+          <span class="px-info" id="px-info">— × —</span>
+          <div class="warn" id="res-warn">⚠ 元画像の解像度が低いため、拡大処理します。より高解像度の元データ推奨。</div>
+        </div>
+        <hr class="cdiv">
+        <div class="c-row full">
+          <span class="c-label">ファイル出力</span>
+          <div class="export-btns">
+            <button class="btn btn-p" id="btn-pdf">PDF で保存</button>
+            <button class="btn btn-s" id="btn-png">PNG（白背景）</button>
+            <button class="btn btn-s" id="btn-png-t">PNG（透過）</button>
+          </div>
+        </div>
+        <div class="c-row full">
+          <div class="hint">
+            <strong>PDF</strong> → 印刷入稿に使用可。<br>
+            <strong>PNG（透過）</strong> → Photoshop に開いて <code>.psd</code>、Illustrator なら <code>.ai</code> として保存可。黒デザインが透明レイヤー上に配置されます。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</div>
+
+<script>
+const drop = document.getElementById('drop');
+const finput = document.getElementById('finput');
+const ws = document.getElementById('ws');
+const srcCvs = document.getElementById('src-cvs');
+const outCvs = document.getElementById('out-cvs');
+const srcCtx = srcCvs.getContext('2d', { willReadFrequently: true });
+const outCtx = outCvs.getContext('2d');
+
+let imgData = null;
+let debTid = null;
+let upscaleCache = null;
+
+// ── File loading ──────────────────────────────────────────────────
+drop.addEventListener('click', () => finput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadFile(f);
+});
+finput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+document.getElementById('btn-change').addEventListener('click', () => { finput.value = ''; finput.click(); });
+document.getElementById('btn-proc').addEventListener('click', process);
+
+function loadFile(file) {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    srcCvs.width = img.width; srcCvs.height = img.height;
+    srcCtx.drawImage(img, 0, 0);
+    imgData = srcCtx.getImageData(0, 0, img.width, img.height);
+    upscaleCache = null;
+    URL.revokeObjectURL(url);
+    document.getElementById('src-info').textContent = `${img.width} × ${img.height} px`;
+    ws.classList.add('on');
+    drop.style.display = 'none';
+    refreshOtsu();
+    updateUsSize();
+    scheduleProcess();
+  };
+  img.src = url;
+}
+
+// ── Image processing helpers ──────────────────────────────────────
+const toGray = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+// Summed-area table (integral image) for fast neighborhood sums
+function buildIntegral(gray, w, h) {
+  const ii = new Float64Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      ii[(y+1)*(w+1)+(x+1)] = gray[y*w+x]
+        + ii[y*(w+1)+(x+1)]
+        + ii[(y+1)*(w+1)+x]
+        - ii[y*(w+1)+x];
+    }
+  }
+  return ii;
+}
+
+function areaSum(ii, w, x1, y1, x2, y2) {
+  return ii[(y2+1)*(w+1)+(x2+1)]
+       - ii[(y1 )*(w+1)+(x2+1)]
+       - ii[(y2+1)*(w+1)+(x1 )]
+       + ii[(y1 )*(w+1)+(x1 )];
+}
+
+// Otsu's method: maximise between-class variance
+function computeOtsu(data) {
+  const hist = new Int32Array(256);
+  const total = data.length / 4;
+  for (let i = 0; i < data.length; i += 4)
+    hist[Math.round(toGray(data[i], data[i+1], data[i+2]))]++;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sumB = 0, wB = 0, maxV = 0, thresh = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB, mF = (sum - sumB) / wF;
+    const v = wB * wF * (mB - mF) ** 2;
+    if (v > maxV) { maxV = v; thresh = t; }
+  }
+  return thresh;
+}
+
+// Sharpen kernel [0,-1,0,-1,5,-1,0,-1,0]
+function applySharpening(data, w, h) {
+  const k = [0,-1,0,-1,5,-1,0,-1,0];
+  const out = new Uint8ClampedArray(data.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let r = 0, g = 0, b = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const nx = Math.min(w-1, Math.max(0, x+kx));
+          const ny = Math.min(h-1, Math.max(0, y+ky));
+          const pi = (ny*w+nx)*4;
+          const kv = k[(ky+1)*3+(kx+1)];
+          r += data[pi] * kv;
+          g += data[pi+1] * kv;
+          b += data[pi+2] * kv;
+        }
+      }
+      const pi = (y*w+x)*4;
+      out[pi]   = Math.min(255, Math.max(0, r));
+      out[pi+1] = Math.min(255, Math.max(0, g));
+      out[pi+2] = Math.min(255, Math.max(0, b));
+      out[pi+3] = 255;
+    }
+  }
+  return out;
+}
+
+// Unsharp mask: original + amount × (original − local_mean_blur)
+function applyUnsharpMask(data, w, h, radius, amount) {
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < gray.length; i++)
+    gray[i] = toGray(data[i*4], data[i*4+1], data[i*4+2]);
+  const ii = buildIntegral(gray, w, h);
+  const out = new Uint8ClampedArray(data.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const x1 = Math.max(0, x-radius), y1 = Math.max(0, y-radius);
+      const x2 = Math.min(w-1, x+radius), y2 = Math.min(h-1, y+radius);
+      const blurV = areaSum(ii, w, x1, y1, x2, y2) / ((x2-x1+1)*(y2-y1+1));
+      const hf = gray[y*w+x] - blurV;
+      const idx = (y*w+x)*4;
+      out[idx]   = Math.min(255, Math.max(0, data[idx]   + amount * hf));
+      out[idx+1] = Math.min(255, Math.max(0, data[idx+1] + amount * hf));
+      out[idx+2] = Math.min(255, Math.max(0, data[idx+2] + amount * hf));
+      out[idx+3] = 255;
+    }
+  }
+  return new ImageData(out, w, h);
+}
+
+// High-quality upscale via browser interpolation, then optional unsharp mask
+function computeUpscale(srcData, scale, useUnsharp) {
+  const { width: w, height: h } = srcData;
+  const nw = w * scale, nh = h * scale;
+  const src = document.createElement('canvas');
+  src.width = w; src.height = h;
+  src.getContext('2d').putImageData(srcData, 0, 0);
+  const dst = document.createElement('canvas');
+  dst.width = nw; dst.height = nh;
+  const dctx = dst.getContext('2d', { willReadFrequently: true });
+  dctx.imageSmoothingEnabled = true;
+  dctx.imageSmoothingQuality = 'high';
+  dctx.drawImage(src, 0, 0, nw, nh);
+  const id = dctx.getImageData(0, 0, nw, nh);
+  if (!useUnsharp) return id;
+  return applyUnsharpMask(id.data, nw, nh, scale >= 4 ? 3 : 2, 1.5);
+}
+
+function getUpscaleScale() {
+  return +(document.querySelector('.us-tab.on')?.dataset.s || 1);
+}
+
+function getWorkingData() {
+  const scale = getUpscaleScale();
+  if (scale === 1) { upscaleCache = null; return imgData; }
+  const unsharp = document.getElementById('cb-unsharp').checked;
+  if (upscaleCache?.scale === scale && upscaleCache?.unsharp === unsharp) return upscaleCache.data;
+  const data = computeUpscale(imgData, scale, unsharp);
+  upscaleCache = { scale, unsharp, data };
+  return data;
+}
+
+function updateUsSize() {
+  const scale = getUpscaleScale();
+  const opt = document.getElementById('us-opt');
+  if (!opt) return;
+  opt.style.display = scale > 1 ? '' : 'none';
+  if (scale > 1 && imgData) {
+    document.getElementById('us-size-info').textContent =
+      `→ ${imgData.width * scale} × ${imgData.height * scale} px に拡大処理`;
+  }
+}
+
+// Global threshold: pixel luminance vs fixed value
+function convertGlobal(data, w, h, threshold) {
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const v = toGray(data[i], data[i+1], data[i+2]) < threshold ? 0 : 255;
+    out[i] = out[i+1] = out[i+2] = v; out[i+3] = 255;
+  }
+  return new ImageData(out, w, h);
+}
+
+// Adaptive threshold: pixel vs local neighbourhood mean, using integral image (O(n))
+function convertAdaptive(data, w, h, blockSize, C) {
+  const half = Math.floor(blockSize / 2);
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < gray.length; i++)
+    gray[i] = toGray(data[i*4], data[i*4+1], data[i*4+2]);
+  const ii = buildIntegral(gray, w, h);
+  const out = new Uint8ClampedArray(data.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const x1 = Math.max(0, x-half), y1 = Math.max(0, y-half);
+      const x2 = Math.min(w-1, x+half), y2 = Math.min(h-1, y+half);
+      const mean = areaSum(ii, w, x1, y1, x2, y2) / ((x2-x1+1)*(y2-y1+1));
+      const v = gray[y*w+x] < mean - C ? 0 : 255;
+      const idx = (y*w+x)*4;
+      out[idx] = out[idx+1] = out[idx+2] = v; out[idx+3] = 255;
+    }
+  }
+  return new ImageData(out, w, h);
+}
+
+// ── Main process ──────────────────────────────────────────────────
+function getParams() {
+  return {
+    method:    document.querySelector('.tab.on')?.dataset.m || 'global',
+    threshold: +document.getElementById('s-thr').value,
+    blockSize: +document.getElementById('s-blk').value,
+    C:         +document.getElementById('s-c').value,
+    sharpen:   document.getElementById('cb-sharp').checked,
+  };
+}
+
+function refreshOtsu() {
+  if (!imgData) return;
+  document.getElementById('otsu-val').textContent = computeOtsu(imgData.data);
+}
+
+function process() {
+  if (!imgData) return;
+  const { method, threshold, blockSize, C, sharpen } = getParams();
+  const workImg = getWorkingData();
+  const { width: w, height: h } = workImg;
+
+  // Pre-process: sharpening (always on for manga mode)
+  let src = workImg.data;
+  if (sharpen || method === 'manga') src = applySharpening(src, w, h);
+
+  let result;
+  if (method === 'global') {
+    result = convertGlobal(src, w, h, threshold);
+  } else if (method === 'otsu') {
+    const t = computeOtsu(src);
+    document.getElementById('otsu-val').textContent = t;
+    result = convertGlobal(src, w, h, t);
+  } else if (method === 'adaptive') {
+    result = convertAdaptive(src, w, h, blockSize, C);
+  } else { // manga: auto-tune block size to ~8% of shorter side, C=10
+    const bs = Math.min(101, Math.max(31, Math.floor(Math.min(w, h) * 0.08) | 1));
+    result = convertAdaptive(src, w, h, bs, 10);
+  }
+
+  outCvs.width = w; outCvs.height = h;
+  outCtx.putImageData(result, 0, 0);
+  document.getElementById('out-info').textContent = `${w} × ${h} px`;
+  if (typeof showExport === 'function') showExport();
+}
+
+function scheduleProcess() {
+  clearTimeout(debTid);
+  debTid = setTimeout(process, 60);
+}
+
+// ── UI events ─────────────────────────────────────────────────────
+document.querySelectorAll('.tab[data-m]').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab[data-m]').forEach(t => t.classList.remove('on'));
+    tab.classList.add('on');
+    updateVisibility();
+    scheduleProcess();
+  });
+});
+
+document.querySelectorAll('.us-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.us-tab').forEach(t => t.classList.remove('on'));
+    tab.classList.add('on');
+    upscaleCache = null;
+    updateUsSize();
+    scheduleProcess();
+  });
+});
+
+document.getElementById('cb-unsharp').addEventListener('change', () => {
+  upscaleCache = null;
+  scheduleProcess();
+});
+
+// Size presets & custom inputs
+document.querySelectorAll('.sz-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.sz-tab').forEach(t => t.classList.remove('on'));
+    tab.classList.add('on');
+    if (tab.dataset.w && tab.dataset.h) {
+      document.getElementById('in-w').value = tab.dataset.w;
+      document.getElementById('in-h').value = tab.dataset.h;
+    }
+    updatePxInfo();
+  });
+});
+
+['in-w', 'in-h'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', () => {
+    document.querySelectorAll('.sz-tab').forEach(t => t.classList.remove('on'));
+    document.querySelector('.sz-tab[data-w=""]')?.classList.add('on');
+    updatePxInfo();
+  });
+});
+
+function updateVisibility() {
+  const m = document.querySelector('.tab.on')?.dataset.m;
+  document.getElementById('g-ctrl').style.display    = m === 'global'   ? '' : 'none';
+  document.getElementById('otsu-row').style.display  = m === 'otsu'     ? '' : 'none';
+  document.getElementById('a-ctrl1').style.display   = m === 'adaptive' ? '' : 'none';
+  document.getElementById('a-ctrl2').style.display   = m === 'adaptive' ? '' : 'none';
+  document.getElementById('manga-info').style.display= m === 'manga'    ? '' : 'none';
+}
+
+[['s-thr','s-thr-v'], ['s-blk','s-blk-v'], ['s-c','s-c-v']].forEach(([id, vid]) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById(vid).textContent = el.value;
+    scheduleProcess();
+  });
+});
+
+document.getElementById('cb-sharp').addEventListener('change', scheduleProcess);
+
+updateVisibility();
+
+// ── Print export ──────────────────────────────────────────────────
+let selectedDpi = 150;
+
+function getPrintCm() {
+  return {
+    w: parseFloat(document.getElementById('in-w')?.value) || 35.5,
+    h: parseFloat(document.getElementById('in-h')?.value) || 40,
+  };
+}
+
+function getPrintPx(dpi) {
+  const { w, h } = getPrintCm();
+  return {
+    w: Math.round((w / 2.54) * dpi),
+    h: Math.round((h / 2.54) * dpi)
+  };
+}
+
+function updatePxInfo() {
+  const { w, h } = getPrintPx(selectedDpi);
+  document.getElementById('px-info').textContent = `${w.toLocaleString()} × ${h.toLocaleString()} px`;
+  const warn = document.getElementById('res-warn');
+  if (imgData && imgData.width > 0) {
+    const scale = w / imgData.width;
+    warn.classList.toggle('show', scale > 4);
+  }
+}
+
+function getScaledCanvas(dpi, transparent) {
+  const { w, h } = getPrintPx(dpi);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(outCvs, 0, 0, w, h);
+  if (transparent) {
+    const id = ctx.getImageData(0, 0, w, h);
+    const d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 128) d[i+3] = 0; // white → transparent
+    }
+    ctx.putImageData(id, 0, 0);
+  }
+  return c;
+}
+
+document.querySelectorAll('.dpi-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.dpi-tab').forEach(t => t.classList.remove('on'));
+    tab.classList.add('on');
+    selectedDpi = +tab.dataset.dpi;
+    updatePxInfo();
+  });
+});
+
+document.getElementById('btn-pdf').addEventListener('click', () => {
+  if (!imgData) return;
+  const btn = document.getElementById('btn-pdf');
+  btn.textContent = '生成中…'; btn.classList.add('btn-loading');
+  setTimeout(() => {
+    try {
+      const canvas = getScaledCanvas(selectedDpi, false);
+      const imgUrl = canvas.toDataURL('image/png');
+      const { jsPDF } = window.jspdf;
+      const { w: pw, h: ph } = getPrintCm();
+      const pdf = new jsPDF({ unit: 'cm', format: [pw, ph], orientation: 'portrait', compress: true });
+      pdf.addImage(imgUrl, 'PNG', 0, 0, pw, ph);
+      pdf.save('tshirt-design.pdf');
+    } finally {
+      btn.textContent = 'PDF で保存'; btn.classList.remove('btn-loading');
+    }
+  }, 10);
+});
+
+document.getElementById('btn-png').addEventListener('click', () => {
+  if (!imgData) return;
+  const canvas = getScaledCanvas(selectedDpi, false);
+  const a = document.createElement('a');
+  a.download = `tshirt-design-${selectedDpi}dpi.png`;
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+});
+
+document.getElementById('btn-png-t').addEventListener('click', () => {
+  if (!imgData) return;
+  const canvas = getScaledCanvas(selectedDpi, true);
+  const a = document.createElement('a');
+  a.download = `tshirt-design-${selectedDpi}dpi-transparent.png`;
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+});
+
+function showExport() {
+  document.getElementById('export-box').style.display = '';
+  updatePxInfo();
+}
+</script>
